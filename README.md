@@ -1,2 +1,2 @@
 # KindleScreenShotToolNonPackage
-KindleスクリーンショットツールのC#・Windowsno
+Kindleスクリーンショットツールのパッケージ未使用版（C#・Windowsの標準の機能のみで実現したもの）
