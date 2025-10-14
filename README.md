@@ -1,0 +1,2 @@
+# KindleScreenShotToolNonPackage
+KindleスクリーンショットツールのC#・Windowsno
