@@ -144,29 +144,104 @@ namespace KindleScreenShotToolNonPackage
                     // 保存ダイアログが消える前に、スクリーンショットの撮影が始まるため、待機させる。
                     Thread.Sleep(100);
 
+                    // 撮影終了条件フラグを設定する。
+                    bool captureEndConditionFlg = DuplicateCountRadioButton.Checked;
+
+                    // 重複枚数を保持する（ＵＩ上分かりやすく２から入力させているので、デクリメントする。）。
+                    int duplicateCount = (int)DuplicateCountNumericUpDown.Value;
+                    duplicateCount--;
+
                     await Task.Run(async () =>
                     {
                         // タスクバーのプログレス状態を設定する。
                         Invoke(() => TaskbarProgress.SetProgressState(Handle, TaskbarProgressState.Normal));
 
-                        for (int index = 0; index < captureCount; index++)
+                        int index = 0;
+
+                        // 撮影終了条件フラグを判定する。
+                        if (captureEndConditionFlg)
                         {
-                            // 早すぎると、うまく撮影出来ないため、待機させる。
-                            await Task.Delay(waitingTime);
+                            string saveFullPath = string.Empty;
+                            string beforeSaveFullPath = string.Empty;
+                            int fileCount = 0;
+                            int matchCount = 0;
 
-                            // スクリーンショットを撮影する。
-                            ScreenShotLogic.SaveScreenShot(
-                                captureStartX,
-                                captureStartY,
-                                captureWidth,
-                                captureHeight,
-                                GetSaveFullPath(ScreenShotSaveFolderBrowserDialog.SelectedPath, index, maxLength));
+                            do
+                            {
+                                // 保存ファイル名を保持する。
+                                saveFullPath = GetSaveFullPath(ScreenShotSaveFolderBrowserDialog.SelectedPath, fileCount, maxLength);
 
-                            // キーを押下する。
-                            ScreenShotLogic.KeyDown(kindleTitle, keyCode);
+                                // ファイル数をインクリメントする。
+                                fileCount++;
 
-                            // プログレス値を設定する。
-                            Invoke(() => TaskbarProgress.SetProgressValue(Handle, (ulong)(index + 1), captureCountULong));
+                                // 早すぎると、うまく撮影出来ないため、待機させる。
+                                await Task.Delay(waitingTime);
+
+                                // スクリーンショットを撮影する。
+                                ScreenShotLogic.SaveScreenShot(
+                                    captureStartX,
+                                    captureStartY,
+                                    captureWidth,
+                                    captureHeight,
+                                    saveFullPath);
+
+                                // 前回保存ファイル名の有無を判定する。
+                                if (!string.IsNullOrEmpty(beforeSaveFullPath))
+                                {
+                                    // 画像ファイルを比較する。
+                                    if (ScreenShotLogic.CompareImage(beforeSaveFullPath, saveFullPath))
+                                    {
+                                        // 一致する場合
+                                        matchCount++;
+                                    }
+                                    else
+                                    {
+                                        // 一致しない場合
+                                        matchCount = 0;
+                                    }
+                                }
+
+                                // 前回保存ファイル名を保持する。
+                                beforeSaveFullPath = saveFullPath;
+
+                                // キーを押下する。
+                                ScreenShotLogic.KeyDown(kindleTitle, keyCode);
+
+                                // プログレス値を設定する。
+                                Invoke(() => TaskbarProgress.SetProgressValue(Handle, (ulong)(index + 1), 20));
+                                if (index == 19)
+                                {
+                                    index = 0;
+                                }
+                                else
+                                {
+                                    index++;
+                                }
+
+                            } while (duplicateCount != matchCount);
+                        }
+                        else
+                        {
+                            // 撮影枚数の場合
+                            for (index = 0; index < captureCount; index++)
+                            {
+                                // 早すぎると、うまく撮影出来ないため、待機させる。
+                                await Task.Delay(waitingTime);
+
+                                // スクリーンショットを撮影する。
+                                ScreenShotLogic.SaveScreenShot(
+                                    captureStartX,
+                                    captureStartY,
+                                    captureWidth,
+                                    captureHeight,
+                                    GetSaveFullPath(ScreenShotSaveFolderBrowserDialog.SelectedPath, index, maxLength));
+
+                                // キーを押下する。
+                                ScreenShotLogic.KeyDown(kindleTitle, keyCode);
+
+                                // プログレス値を設定する。
+                                Invoke(() => TaskbarProgress.SetProgressValue(Handle, (ulong)(index + 1), captureCountULong));
+                            }
                         }
                     });
 
@@ -231,6 +306,28 @@ namespace KindleScreenShotToolNonPackage
         private void FileNameSerialNumberNumericUpDown_ValueChanged(object sender, EventArgs e)
         {
             FileNameSampleLabel.Text = $@"サンプルファイル名：{new string('0', (int)FileNameSerialNumberNumericUpDown.Value)}.png";
+        }
+
+        /// <summary>
+        /// 重複枚数ラジオボタンチェック変更処理
+        /// </summary>
+        /// <param name="sender">オブジェクト</param>
+        /// <param name="e">イベント</param>
+        private void DuplicateCountRadioButton_CheckedChanged(object sender, EventArgs e)
+        {
+            DuplicateCountNumericUpDown.Enabled = DuplicateCountRadioButton.Checked;
+            CaptureCountNumericUpDown.Enabled = CaptureCountRadioButton.Checked;
+        }
+
+        /// <summary>
+        /// 撮影枚数ラジオボタンチェック変更処理
+        /// </summary>
+        /// <param name="sender">オブジェクト</param>
+        /// <param name="e">イベント</param>
+        private void CaptureCountRadioButton_CheckedChanged(object sender, EventArgs e)
+        {
+            DuplicateCountNumericUpDown.Enabled = DuplicateCountRadioButton.Checked;
+            CaptureCountNumericUpDown.Enabled = CaptureCountRadioButton.Checked;
         }
 
         #endregion
@@ -379,10 +476,12 @@ namespace KindleScreenShotToolNonPackage
         /// </summary>
         /// <param name="sender">オブジェクト</param>
         /// <param name="e">イベント</param>
-        private void PDFExeButton_Click(object sender, EventArgs e)
+        private async void PDFExeButton_Click(object sender, EventArgs e)
         {
             try
             {
+                PDFExeButton.Enabled = false;
+
                 if (string.IsNullOrEmpty(PDFImageFolderPathTextBox.Text))
                 {
                     ShowMessage("エラー", "画像フォルダパスが未入力です。", MessageBoxIcon.Error);
@@ -400,94 +499,99 @@ namespace KindleScreenShotToolNonPackage
 
                 if (Equals(DialogResult.OK, PDFSaveFileDialog.ShowDialog(this)))
                 {
-                    // 拡張子が、【.png】（大文字・小文字問わず）のフルパスを取得し、リストにする。
-                    List<string> pngPathList = [..Directory.EnumerateFiles(pdfImageFolderPath, "*.png", SearchOption.TopDirectoryOnly)
+                    string pageDirection = PageDirectionComboBox.Text;
+                    string imageDisplay = ImageDisplayComboBox.Text;
+
+                    await Task.Run(() =>
+                    {
+                        // 拡張子が、【.png】（大文字・小文字問わず）のフルパスを取得し、リストにする。
+                        List<string> pngPathList = [..Directory.EnumerateFiles(pdfImageFolderPath, "*.png", SearchOption.TopDirectoryOnly)
                         .Where(path => path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
                         .OrderBy(path => Path.GetFileName(path))
                         .ToList()];
 
-                    // ページの向きを保持する。
-                    bool landscapeFlg = string.Equals("横向き", PageDirectionComboBox.Text);
+                        // ページの向きを保持する。
+                        bool landscapeFlg = string.Equals("横向き", pageDirection);
 
-                    // 画像表示を保持する。
-                    // （true：全画面・false：中央表示）
-                    bool imageDisplayFlg = string.Equals("全表示", ImageDisplayComboBox.Text);
+                        // 画像表示を保持する。
+                        // （true：全画面・false：中央表示）
+                        bool imageDisplayFlg = string.Equals("全表示", imageDisplay);
 
-                    PrintDocument doc = new()
-                    {
-                        PrinterSettings = new PrinterSettings()
+                        PrintDocument doc = new()
                         {
-                            PrinterName = "Microsoft Print to PDF",
-                            MaximumPage = pngPathList.Count,
-                            ToPage = pngPathList.Count,
-                            DefaultPageSettings = { Landscape = landscapeFlg, },
-                            PrintToFile = true, // ファイルに出力する。
-                            PrintFileName = Path.Combine(PDFSaveFileDialog.FileName),
-                        }
-                    };
+                            PrinterSettings = new PrinterSettings()
+                            {
+                                PrinterName = "Microsoft Print to PDF",
+                                MaximumPage = pngPathList.Count,
+                                ToPage = pngPathList.Count,
+                                DefaultPageSettings = { Landscape = landscapeFlg, },
+                                PrintToFile = true, // ファイルに出力する。
+                                PrintFileName = Path.Combine(PDFSaveFileDialog.FileName),
+                            }
+                        };
 
-                    // 余白を無しにする。
-                    doc.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
+                        // 余白を無しにする。
+                        doc.DefaultPageSettings.Margins = new Margins(0, 0, 0, 0);
 
-                    int currentPageIndex = 0;
+                        int currentPageIndex = 0;
 
-                    // ページ設定を行う。
-                    doc.PrintPage += (s, e) =>
-                    {
-                        using (var image = Image.FromFile(pngPathList[currentPageIndex]))
+                        // ページ設定を行う。
+                        doc.PrintPage += (s, e) =>
                         {
-                            Rectangle pageRect;
-                            int x;
-                            int y;
-
-                            if (imageDisplayFlg)
+                            using (var image = Image.FromFile(pngPathList[currentPageIndex]))
                             {
-                                // 全画面の場合
-                                pageRect = e.PageBounds;
+                                Rectangle pageRect;
+                                int x;
+                                int y;
 
-                                // 横幅・縦幅の倍率を算出する。
-                                float ratioX = (float)pageRect.Width / image.Width;
-                                float ratioY = (float)pageRect.Height / image.Height;
+                                if (imageDisplayFlg)
+                                {
+                                    // 全画面の場合
+                                    pageRect = e.PageBounds;
 
-                                // 画像の縦横比を保つため、より小さい倍率を保持する。
-                                float ratio = Math.Min(ratioX, ratioY);
+                                    // 横幅・縦幅の倍率を算出する。
+                                    float ratioX = (float)pageRect.Width / image.Width;
+                                    float ratioY = (float)pageRect.Height / image.Height;
 
-                                // 描画する画像サイズを倍率に応じて算出する。
-                                int drawWidth = (int)(image.Width * ratio);
-                                int drawHeight = (int)(image.Height * ratio);
+                                    // 画像の縦横比を保つため、より小さい倍率を保持する。
+                                    float ratio = Math.Min(ratioX, ratioY);
 
-                                // ページ中央に画像を配置するための座標を算出する。
-                                x = pageRect.X + (pageRect.Width - drawWidth) / 2;
-                                y = pageRect.Y + (pageRect.Height - drawHeight) / 2;
+                                    // 描画する画像サイズを倍率に応じて算出する。
+                                    int drawWidth = (int)(image.Width * ratio);
+                                    int drawHeight = (int)(image.Height * ratio);
 
-                                // 算出した位置とサイズで画像を描画する。
-                                e.Graphics?.DrawImage(image, x, y, drawWidth, drawHeight);
+                                    // ページ中央に画像を配置するための座標を算出する。
+                                    x = pageRect.X + (pageRect.Width - drawWidth) / 2;
+                                    y = pageRect.Y + (pageRect.Height - drawHeight) / 2;
+
+                                    // 算出した位置とサイズで画像を描画する。
+                                    e.Graphics?.DrawImage(image, x, y, drawWidth, drawHeight);
+                                }
+                                else
+                                {
+                                    // 中央表示の場合
+                                    pageRect = e.MarginBounds;
+
+                                    // 画像サイズを保持する。
+                                    int imgWidth = image.Width;
+                                    int imgHeight = image.Height;
+
+                                    // 中央に配置するため、位置を算出する。
+                                    x = pageRect.X + (pageRect.Width - imgWidth) / 2;
+                                    y = pageRect.Y + (pageRect.Height - imgHeight) / 2;
+
+                                    // 原寸サイズで描画する。
+                                    e.Graphics?.DrawImage(image, x, y, imgWidth, imgHeight);
+                                }
                             }
-                            else
-                            {
-                                // 中央表示の場合
-                                pageRect = e.MarginBounds;
 
-                                // 画像サイズを保持する。
-                                int imgWidth = image.Width;
-                                int imgHeight = image.Height;
+                            currentPageIndex++;
+                            e.HasMorePages = currentPageIndex < pngPathList.Count;
+                        };
 
-                                // 中央に配置するため、位置を算出する。
-                                x = pageRect.X + (pageRect.Width - imgWidth) / 2;
-                                y = pageRect.Y + (pageRect.Height - imgHeight) / 2;
-
-                                // 原寸サイズで描画する。
-                                e.Graphics?.DrawImage(image, x, y, imgWidth, imgHeight);
-                            }
-                        }
-
-                        currentPageIndex++;
-                        e.HasMorePages = currentPageIndex < pngPathList.Count;
-                    };
-
-
-                    // PDFファイルとして印刷（保存）する。
-                    doc.Print();
+                        // PDFファイルとして印刷（保存）する。
+                        doc.Print();
+                    });
 
                     ShowMessage("PDF作成完了", "PDFの作成が完了しました。", MessageBoxIcon.Information);
                 }
@@ -495,6 +599,10 @@ namespace KindleScreenShotToolNonPackage
             catch (Exception ex)
             {
                 ShowMessage("エラー", ex.Message, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                PDFExeButton.Enabled = true;
             }
         }
 
@@ -517,10 +625,12 @@ namespace KindleScreenShotToolNonPackage
         /// </summary>
         /// <param name="sender">オブジェクト</param>
         /// <param name="e">イベント</param>
-        private void ImageConcatenationExeButton_Click(object sender, EventArgs e)
+        private async void ImageConcatenationExeButton_Click(object sender, EventArgs e)
         {
             try
             {
+                ImageConcatenationExeButton.Enabled = false;
+
                 if (string.IsNullOrEmpty(ImageConcatenationImageFolderPathTextBox.Text))
                 {
                     ShowMessage("エラー", "画像フォルダパスが未入力です。", MessageBoxIcon.Error);
@@ -549,40 +659,43 @@ namespace KindleScreenShotToolNonPackage
                     // ファイル名連番桁数を保持する。
                     int maxLength = (int)ImageConcatenationFileNameSerialNumberNumericUpDown.Value;
 
-                    // 拡張子が、【.png】（大文字・小文字問わず）の全ファイルを取得し、リストにする。
-                    var pngFileList = Directory.EnumerateFiles(imageFolderPath, "*.png", SearchOption.TopDirectoryOnly)
-                        .Where(path => path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
-                        .OrderBy(Path.GetFileName)
-                        .ToList();
-
-                    string maxCount = ConvertNumberWide(pngFileList.Count);
-
-                    // リストを分割する。
-                    string[][] splitArray = pngFileList.Chunk(connectionCount).ToArray();
-
-                    int count = 0;
-
-                    for (int index = 0; index < splitArray.Length; index++)
+                    await Task.Run(() =>
                     {
-                        var pngFilePathAr = splitArray[index];
+                        // 拡張子が、【.png】（大文字・小文字問わず）の全ファイルを取得し、リストにする。
+                        var pngFileList = Directory.EnumerateFiles(imageFolderPath, "*.png", SearchOption.TopDirectoryOnly)
+                            .Where(path => path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                            .OrderBy(Path.GetFileName)
+                            .ToList();
 
-                        // 連結方向を判定する。
-                        if (Equals(1, connectionDirection) || Equals(3, connectionDirection))
+                        string maxCount = ConvertNumberWide(pngFileList.Count);
+
+                        // リストを分割する。
+                        string[][] splitArray = pngFileList.Chunk(connectionCount).ToArray();
+
+                        int count = 0;
+
+                        for (int index = 0; index < splitArray.Length; index++)
                         {
-                            pngFilePathAr = [.. pngFilePathAr.OrderByDescending(pngFilePath => pngFilePath)];
+                            var pngFilePathAr = splitArray[index];
+
+                            // 連結方向を判定する。
+                            if (Equals(1, connectionDirection) || Equals(3, connectionDirection))
+                            {
+                                pngFilePathAr = [.. pngFilePathAr.OrderByDescending(pngFilePath => pngFilePath)];
+                            }
+
+                            // 画像を連結する。
+                            MergeImage(
+                                pngFilePathAr,
+                                GetSaveFullPath(ConnectionImageSaveFolderBrowserDialog.SelectedPath, index, maxLength),
+                                verticalFlg);
+
+                            count += pngFilePathAr.Length;
+
+                            // タイトルに処理件数を設定する。
+                            Invoke(() => Text = $"処理件数：{ConvertNumberWide(count)}／{maxCount}ファイル完了");
                         }
-
-                        // 画像を連結する。
-                        MergeImage(
-                            pngFilePathAr,
-                            GetSaveFullPath(ConnectionImageSaveFolderBrowserDialog.SelectedPath, index, maxLength),
-                            verticalFlg);
-
-                        count += pngFilePathAr.Length;
-
-                        // タイトルに処理件数を設定する。
-                        Invoke(() => Text = $"処理件数：{ConvertNumberWide(count)}／{maxCount}ファイル完了");
-                    }
+                    });
 
                     ShowMessage("画像連結完了", "画像の連結が完了しました。", MessageBoxIcon.Information);
                 }
@@ -594,6 +707,7 @@ namespace KindleScreenShotToolNonPackage
             finally
             {
                 Text = "Kindleスクリーンショットツール";
+                ImageConcatenationExeButton.Enabled = true;
             }
         }
 
