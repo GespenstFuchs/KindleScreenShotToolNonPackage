@@ -29,6 +29,7 @@
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
             MainTabControl = new TabControl();
             ScreenShotTabPage = new TabPage();
             label12 = new Label();
@@ -916,6 +917,7 @@
             ClientSize = new Size(800, 517);
             Controls.Add(MainTabControl);
             Font = new Font("Yu Gothic UI", 12F);
+            Icon = (Icon)resources.GetObject("$this.Icon");
             Margin = new Padding(4);
             Name = "MainForm";
             StartPosition = FormStartPosition.CenterScreen;
